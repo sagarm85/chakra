@@ -1,5 +1,5 @@
 github:
-  repo: "owner/repo-name"
+  repo: "sagarm85/chakara-demo-restapis"
   base_branch: "main"
   ci_workflow: "ci.yml"
 
@@ -8,7 +8,7 @@ anthropic:
 
 google:
   credentials_path: "./credentials.json"
-  spreadsheet_id: "your-sheet-id-here"
+  spreadsheet_id: "1QRc_kzCtJ1SaC65c9A8q-ZRrh9Mq8Ila18UANRDmMls"
 
 tracker:
   sheet_name: "Chakra Tracker"
