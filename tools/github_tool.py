@@ -1,6 +1,7 @@
 import logging
 import time
 
+import requests
 from github import Github, InputGitTreeElement
 
 logger = logging.getLogger(__name__)
@@ -8,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 class GitHubTool:
     def __init__(self, token: str, repo_name: str):
+        self._token = token
         self._gh = Github(token)
         self._repo = self._gh.get_repo(repo_name)
 
@@ -35,6 +37,34 @@ class GitHubTool:
         pr = self._repo.create_pull(title=title, body=body, head=branch, base=base_branch)
         logger.info("Opened PR #%d: %s", pr.number, pr.html_url)
         return pr.html_url, pr.number
+
+    def open_draft_pr(self, branch: str, base_branch: str, title: str, body: str) -> tuple[str, int]:
+        pr = self._repo.create_pull(
+            title=title, body=body, head=branch, base=base_branch, draft=True
+        )
+        logger.info("Opened draft PR #%d: %s", pr.number, pr.html_url)
+        return pr.html_url, pr.number
+
+    def mark_pr_ready(self, pr_number: int) -> None:
+        pr = self._repo.get_pull(pr_number)
+        mutation = """
+        mutation($id: ID!) {
+          markPullRequestReadyForReview(input: {pullRequestId: $id}) {
+            pullRequest { isDraft }
+          }
+        }
+        """
+        resp = requests.post(
+            "https://api.github.com/graphql",
+            json={"query": mutation, "variables": {"id": pr.node_id}},
+            headers={"Authorization": f"Bearer {self._token}"},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if "errors" in data:
+            raise RuntimeError(f"GraphQL error marking PR ready: {data['errors']}")
+        logger.info("PR #%d marked ready for review", pr_number)
 
     def poll_merge(self, pr_number: int, interval_seconds: int = 30) -> None:
         logger.info("Polling PR #%d for merge every %ds...", pr_number, interval_seconds)
