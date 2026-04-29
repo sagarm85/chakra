@@ -295,3 +295,68 @@ def test_corrupt_checkpoint_treated_as_fresh_start(tmp_path, mock_config, mock_t
     story_file.with_suffix(".chakra.json").write_text("not valid json {{{{")
     _run_resuming(tmp_path, mock_config, github, sheets, agent, story_text)
     agent.plan.assert_called_once()
+
+
+def test_orchestrator_uses_claude_cli_backend_when_configured(tmp_path, mock_tools):
+    from tools.config import Config, GitHubConfig, AnthropicConfig, GoogleConfig, TrackerConfig, StoryConfig, ClaudeCliConfig
+    config = Config(
+        github=GitHubConfig(repo="owner/repo", base_branch="main", ci_workflow="ci.yml"),
+        anthropic=AnthropicConfig(model="claude-opus-4-7"),
+        google=GoogleConfig(credentials_path="./credentials.json", spreadsheet_id="sid"),
+        tracker=TrackerConfig(sheet_name="Chakra Tracker"),
+        story=StoryConfig(id_prefix="CHAKRA"),
+        backend="claude-cli",
+        claude_cli=ClaudeCliConfig(model=None, timeout=120),
+    )
+    github, sheets, agent = mock_tools
+    story_file = tmp_path / "story.txt"
+    story_file.write_text("As a user I want X")
+    with patch("orchestrator.load_config", return_value=config), \
+         patch("orchestrator.setup_logging"), \
+         patch("orchestrator.GitHubTool", return_value=github), \
+         patch("orchestrator.SheetsTool", return_value=sheets), \
+         patch("orchestrator.SDLCAgent", return_value=agent), \
+         patch("orchestrator.ClaudeCliBackend") as mock_cli_backend, \
+         patch("orchestrator.prompt_approval", return_value=True), \
+         patch.dict("os.environ", {"GITHUB_TOKEN": "tok"}):
+        orchestrator.run(str(story_file))
+    mock_cli_backend.assert_called_once_with(model=None, timeout=120)
+
+
+def test_orchestrator_uses_anthropic_backend_when_configured(tmp_path, mock_tools):
+    from tools.config import Config, GitHubConfig, AnthropicConfig, GoogleConfig, TrackerConfig, StoryConfig
+    config = Config(
+        github=GitHubConfig(repo="owner/repo", base_branch="main", ci_workflow="ci.yml"),
+        anthropic=AnthropicConfig(model="claude-opus-4-7"),
+        google=GoogleConfig(credentials_path="./credentials.json", spreadsheet_id="sid"),
+        tracker=TrackerConfig(sheet_name="Chakra Tracker"),
+        story=StoryConfig(id_prefix="CHAKRA"),
+        backend="anthropic-api",
+    )
+    github, sheets, agent = mock_tools
+    story_file = tmp_path / "story.txt"
+    story_file.write_text("As a user I want X")
+    with patch("orchestrator.load_config", return_value=config), \
+         patch("orchestrator.setup_logging"), \
+         patch("orchestrator.GitHubTool", return_value=github), \
+         patch("orchestrator.SheetsTool", return_value=sheets), \
+         patch("orchestrator.SDLCAgent", return_value=agent), \
+         patch("orchestrator.AnthropicBackend") as mock_api_backend, \
+         patch("orchestrator.prompt_approval", return_value=True), \
+         patch.dict("os.environ", {"GITHUB_TOKEN": "tok", "ANTHROPIC_API_KEY": "test-key"}):
+        orchestrator.run(str(story_file))
+    mock_api_backend.assert_called_once_with(api_key="test-key", model="claude-opus-4-7")
+
+
+def test_orchestrator_raises_when_api_key_missing_for_anthropic_backend(tmp_path, mock_config, mock_tools):
+    github, sheets, _ = mock_tools
+    story_file = tmp_path / "story.txt"
+    story_file.write_text("As a user I want X")
+    env = {"GITHUB_TOKEN": "tok"}  # no ANTHROPIC_API_KEY
+    with patch("orchestrator.load_config", return_value=mock_config), \
+         patch("orchestrator.setup_logging"), \
+         patch("orchestrator.GitHubTool", return_value=github), \
+         patch("orchestrator.SheetsTool", return_value=sheets), \
+         patch.dict("os.environ", env, clear=True), \
+         pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
+        orchestrator.run(str(story_file))
