@@ -5,34 +5,25 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-import anthropic
+from agents.backend import AgentBackend
 
 logger = logging.getLogger(__name__)
 
 
 class SDLCAgent:
-    def __init__(self, api_key: str, model: str):
-        self._client = anthropic.Anthropic(api_key=api_key)
-        self._model = model
+    def __init__(self, backend: AgentBackend):
+        self._backend = backend
 
     def _call(self, system: str, user: str) -> str:
-        logger.debug("Claude prompt (%s): %s", self._model, user[:500])
-        response = self._client.messages.create(
-            model=self._model,
-            max_tokens=8096,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-        )
-        result = response.content[0].text
-        logger.debug("Claude response: %s", result[:500])
+        logger.debug("LLM prompt: %s", user[:500])
+        result = self._backend.call(system, user)
+        logger.debug("LLM response: %s", result[:500])
         return result
 
     def _extract_json(self, text: str):
-        # Try fenced code block (handles varied whitespace and case)
         match = re.search(r"```(?:json)?\s*\n(.*?)\n\s*```", text, re.DOTALL | re.IGNORECASE)
         if match:
             return json.loads(match.group(1).strip())
-        # Fall back to first JSON array or object in the text
         for opener, closer in [("[", "]"), ("{", "}")]:
             start = text.find(opener)
             end = text.rfind(closer)
