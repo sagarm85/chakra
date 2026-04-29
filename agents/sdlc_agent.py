@@ -77,6 +77,41 @@ class SDLCAgent:
         logger.info("Generated %d code files", len(files))
         return files
 
+    def code_task(
+        self,
+        story: str,
+        task: dict,
+        accumulated_files: dict[str, str],
+    ) -> dict[str, str]:
+        context_section = ""
+        if accumulated_files:
+            files_summary = "\n\n".join(
+                f"# {fname}\n{content[:800]}{'...' if len(content) > 800 else ''}"
+                for fname, content in accumulated_files.items()
+            )
+            context_section = (
+                f"\n\nExisting files already generated (do not duplicate; "
+                f"import or extend as needed):\n{files_summary}"
+            )
+        user = (
+            f"Generate Python implementation code for this single task only.\n\n"
+            f"User story: {story}\n\n"
+            f"Task to implement:\n- {task['task']}: {task['description']}"
+            f"{context_section}\n\n"
+            f"Return ONLY new or modified files for this task as a JSON object "
+            f"mapping filename to file content.\n"
+            f'Format: ```json\n{{"path/to/file.py": "# file content"}}\n```'
+        )
+        system = (
+            "You are a senior Python developer. "
+            "Write clean, well-structured Python 3.12 code. "
+            "Return only the files needed for this specific task."
+        )
+        response = self._call(system, user)
+        files = self._extract_json(response)
+        logger.info("Generated %d files for task: %s", len(files), task["task"])
+        return files
+
     def test(
         self,
         story: str,

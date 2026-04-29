@@ -96,3 +96,39 @@ def test_extract_json_raises_on_no_json(agent, backend):
     backend.call.return_value = "This is plain text with no JSON at all."
     with pytest.raises(ValueError, match="No JSON found"):
         agent.plan("story")
+
+
+CODE_TASK_RESPONSE = '```json\n{"src/routes.py": "def shorten(): pass"}\n```'
+
+
+def test_code_task_returns_dict_of_files(agent, backend):
+    backend.call.return_value = CODE_TASK_RESPONSE
+    task = {"task": "routes", "description": "Add POST /shorten endpoint"}
+    result = agent.code_task("story", task, {})
+    assert "src/routes.py" in result
+
+
+def test_code_task_includes_task_in_prompt(agent, backend):
+    backend.call.return_value = CODE_TASK_RESPONSE
+    task = {"task": "routes", "description": "Add POST /shorten endpoint"}
+    agent.code_task("story", task, {})
+    _, user = backend.call.call_args.args
+    assert "routes" in user
+    assert "Add POST /shorten endpoint" in user
+
+
+def test_code_task_includes_accumulated_files_in_prompt(agent, backend):
+    backend.call.return_value = CODE_TASK_RESPONSE
+    task = {"task": "routes", "description": "Add POST /shorten"}
+    accumulated = {"src/app.py": "from flask import Flask\napp = Flask(__name__)"}
+    agent.code_task("story", task, accumulated)
+    _, user = backend.call.call_args.args
+    assert "src/app.py" in user
+
+
+def test_code_task_empty_accumulated_files_has_no_context_section(agent, backend):
+    backend.call.return_value = CODE_TASK_RESPONSE
+    task = {"task": "setup", "description": "Initialize Flask"}
+    agent.code_task("story", task, {})
+    _, user = backend.call.call_args.args
+    assert "Existing files" not in user
