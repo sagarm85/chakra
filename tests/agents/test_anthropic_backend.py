@@ -17,11 +17,6 @@ def _mock_response(text: str):
     return msg
 
 
-def test_agent_backend_importable():
-    from agents.backend import AgentBackend
-    assert AgentBackend is not None
-
-
 def test_call_returns_text(backend):
     backend._client.messages.create.return_value = _mock_response("hello")
     result = backend.call("system prompt", "user prompt")

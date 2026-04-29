@@ -18,6 +18,8 @@ class ClaudeCliBackend:
                 text=True,
                 timeout=self._timeout,
             )
+        except FileNotFoundError:
+            raise RuntimeError("claude CLI not found on PATH — install it or check your subscription login")
         except subprocess.TimeoutExpired:
             raise RuntimeError(f"Claude CLI timed out after {self._timeout}s")
         if result.returncode != 0:

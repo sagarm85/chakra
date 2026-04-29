@@ -9,9 +9,11 @@ Agentic SDLC loop: user story → GitHub PR via Claude.
 ## Entry point
 ```bash
 export GITHUB_TOKEN=...
-export ANTHROPIC_API_KEY=...
+export ANTHROPIC_API_KEY=...   # required when backend=anthropic-api (default)
 python orchestrator.py story.txt
 ```
+
+Set `backend: claude-cli` in `chakra.yaml` to use the Claude CLI subprocess backend instead of the Anthropic SDK (no `ANTHROPIC_API_KEY` needed; requires a Claude subscription and `claude` on your PATH).
 
 ## Setup
 1. `pip install -r requirements.txt`
@@ -42,7 +44,11 @@ pytest tests/test_orchestrator.py::test_happy_path_calls_all_steps
 
 ```
 orchestrator.py          — top-level entry point; orchestrates the SDLC phases in sequence
-agents/sdlc_agent.py     — SDLCAgent: wraps the Anthropic API for plan/code/test/measure_coverage
+agents/
+  sdlc_agent.py          — SDLCAgent: orchestrates plan/code/test/measure_coverage via an AgentBackend
+  backend.py             — AgentBackend Protocol (runtime_checkable)
+  anthropic_backend.py   — AnthropicBackend: calls Anthropic SDK (requires ANTHROPIC_API_KEY)
+  claude_cli_backend.py  — ClaudeCliBackend: calls `claude -p` subprocess (requires Claude subscription)
 tools/
   config.py              — load_config() parses chakra.yaml into typed dataclasses
   approval_tool.py       — CLI prompt_approval(); raises ApprovalRejected with user feedback

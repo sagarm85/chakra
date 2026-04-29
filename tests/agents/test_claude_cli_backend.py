@@ -87,3 +87,9 @@ def test_call_raises_on_timeout(backend):
     with patch("agents.claude_cli_backend.subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="claude", timeout=120)):
         with pytest.raises(RuntimeError, match="timed out"):
             backend.call("s", "u")
+
+
+def test_call_raises_when_claude_not_on_path(backend):
+    with patch("agents.claude_cli_backend.subprocess.run", side_effect=FileNotFoundError()):
+        with pytest.raises(RuntimeError, match="not found on PATH"):
+            backend.call("s", "u")

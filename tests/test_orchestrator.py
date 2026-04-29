@@ -8,13 +8,15 @@ from tools.checkpoint_tool import story_hash as _story_hash
 
 @pytest.fixture
 def mock_config():
-    from tools.config import Config, GitHubConfig, AnthropicConfig, GoogleConfig, TrackerConfig, StoryConfig
+    from tools.config import Config, GitHubConfig, AnthropicConfig, GoogleConfig, TrackerConfig, StoryConfig, ClaudeCliConfig
     return Config(
         github=GitHubConfig(repo="owner/repo", base_branch="main", ci_workflow="ci.yml"),
         anthropic=AnthropicConfig(model="claude-opus-4-7"),
         google=GoogleConfig(credentials_path="./credentials.json", spreadsheet_id="sid"),
         tracker=TrackerConfig(sheet_name="Chakra Tracker"),
         story=StoryConfig(id_prefix="CHAKRA"),
+        backend="anthropic-api",
+        claude_cli=ClaudeCliConfig(),
     )
 
 
