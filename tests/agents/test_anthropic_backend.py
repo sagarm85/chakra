@@ -8,7 +8,7 @@ def backend():
     with patch("agents.anthropic_backend.anthropic.Anthropic"):
         b = AnthropicBackend(api_key="fake-key", model="claude-opus-4-7")
         b._client = MagicMock()
-        return b
+        yield b
 
 
 def _mock_response(text: str):
@@ -31,7 +31,7 @@ def test_call_returns_text(backend):
 def test_call_passes_system_and_user(backend):
     backend._client.messages.create.return_value = _mock_response("ok")
     backend.call("my system", "my user")
-    kwargs = backend._client.messages.create.call_args[1]
+    kwargs = backend._client.messages.create.call_args.kwargs
     assert kwargs["system"] == "my system"
     assert kwargs["messages"][0]["content"] == "my user"
 
@@ -39,12 +39,19 @@ def test_call_passes_system_and_user(backend):
 def test_call_uses_configured_model(backend):
     backend._client.messages.create.return_value = _mock_response("ok")
     backend.call("s", "u")
-    kwargs = backend._client.messages.create.call_args[1]
+    kwargs = backend._client.messages.create.call_args.kwargs
     assert kwargs["model"] == "claude-opus-4-7"
 
 
 def test_call_sets_max_tokens(backend):
     backend._client.messages.create.return_value = _mock_response("ok")
     backend.call("s", "u")
-    kwargs = backend._client.messages.create.call_args[1]
+    kwargs = backend._client.messages.create.call_args.kwargs
     assert kwargs["max_tokens"] == 8096
+
+
+def test_implements_agent_backend_protocol():
+    from agents.backend import AgentBackend
+    with patch("agents.anthropic_backend.anthropic.Anthropic"):
+        b = AnthropicBackend(api_key="k", model="m")
+    assert isinstance(b, AgentBackend)
