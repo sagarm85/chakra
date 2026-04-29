@@ -51,7 +51,16 @@ def run(story_path: str) -> None:
         config.google.spreadsheet_id,
         config.tracker.sheet_name,
     )
-    backend = AnthropicBackend(os.environ["ANTHROPIC_API_KEY"], config.anthropic.model)
+    if config.backend == "claude-cli":
+        backend = ClaudeCliBackend(
+            model=config.claude_cli.model,
+            timeout=config.claude_cli.timeout,
+        )
+    else:
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise ValueError("ANTHROPIC_API_KEY environment variable is required for anthropic-api backend")
+        backend = AnthropicBackend(api_key=api_key, model=config.anthropic.model)
     agent = SDLCAgent(backend)
 
     # Checkpoint / resume
