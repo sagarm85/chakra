@@ -11,12 +11,15 @@ class ClaudeCliBackend:
         cmd = ["claude", "-p", prompt]
         if self._model:
             cmd += ["--model", self._model]
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=self._timeout,
-        )
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=self._timeout,
+            )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(f"Claude CLI timed out after {self._timeout}s")
         if result.returncode != 0:
             raise RuntimeError(f"Claude CLI failed: {result.stderr}")
         output = result.stdout.strip()
