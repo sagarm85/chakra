@@ -1,6 +1,6 @@
 import pytest
 import yaml
-from tools.config import load_config, Config, GitHubConfig, AnthropicConfig, GoogleConfig, TrackerConfig, StoryConfig
+from tools.config import load_config, Config, GitHubConfig, AnthropicConfig, GoogleConfig, TrackerConfig, StoryConfig, ClaudeCliConfig
 
 
 VALID_YAML = """
@@ -63,9 +63,6 @@ def test_load_config_file_not_found():
     with pytest.raises(FileNotFoundError):
         load_config("/nonexistent/chakra.yaml")
 
-
-from tools.config import ClaudeCliConfig
-
 YAML_WITH_CLI_BACKEND = """
 github:
   repo: "owner/repo"
@@ -127,3 +124,11 @@ def test_load_config_claude_cli_defaults_when_section_absent(tmp_path):
     config = load_config(str(cfg_file))
     assert config.claude_cli.model is None
     assert config.claude_cli.timeout == 120
+
+
+def test_load_config_invalid_backend_raises(tmp_path):
+    bad_yaml = VALID_YAML + "\nbackend: \"unknown-backend\"\n"
+    cfg_file = tmp_path / "chakra.yaml"
+    cfg_file.write_text(bad_yaml)
+    with pytest.raises(ValueError, match="Invalid backend"):
+        load_config(str(cfg_file))
