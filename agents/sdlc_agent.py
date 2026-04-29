@@ -21,9 +21,11 @@ class SDLCAgent:
         return result
 
     def _extract_json(self, text: str):
+        # Try fenced code block (handles varied whitespace and case)
         match = re.search(r"```(?:json)?\s*\n(.*?)\n\s*```", text, re.DOTALL | re.IGNORECASE)
         if match:
             return json.loads(match.group(1).strip())
+        # Fall back to first JSON array or object in the text
         for opener, closer in [("[", "]"), ("{", "}")]:
             start = text.find(opener)
             end = text.rfind(closer)

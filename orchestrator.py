@@ -4,6 +4,8 @@ import re
 import sys
 from pathlib import Path
 
+from agents.anthropic_backend import AnthropicBackend
+from agents.claude_cli_backend import ClaudeCliBackend
 from agents.sdlc_agent import SDLCAgent
 from tools.approval_tool import ApprovalRejected, prompt_approval
 from tools.checkpoint_tool import (
@@ -49,7 +51,8 @@ def run(story_path: str) -> None:
         config.google.spreadsheet_id,
         config.tracker.sheet_name,
     )
-    agent = SDLCAgent(os.environ["ANTHROPIC_API_KEY"], config.anthropic.model)
+    backend = AnthropicBackend(os.environ["ANTHROPIC_API_KEY"], config.anthropic.model)
+    agent = SDLCAgent(backend)
 
     # Checkpoint / resume
     current_hash = _story_hash(story)

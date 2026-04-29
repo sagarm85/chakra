@@ -29,14 +29,14 @@ def test_plan_returns_list_of_dicts(agent, backend):
 def test_plan_includes_rejection_feedback_in_prompt(agent, backend):
     backend.call.return_value = PLAN_RESPONSE
     agent.plan("story", rejection_feedback="too vague")
-    _, user = backend.call.call_args[0]
+    _, user = backend.call.call_args.args
     assert "too vague" in user
 
 
 def test_plan_no_feedback_omits_feedback_section(agent, backend):
     backend.call.return_value = PLAN_RESPONSE
     agent.plan("story", rejection_feedback="")
-    _, user = backend.call.call_args[0]
+    _, user = backend.call.call_args.args
     assert "rejection" not in user.lower()
 
 
@@ -58,7 +58,7 @@ def test_test_returns_dict_of_test_files(agent, backend):
 def test_test_includes_coverage_feedback_in_prompt(agent, backend):
     backend.call.return_value = TEST_RESPONSE
     agent.test("story", {}, coverage_feedback="TOTAL 10 5 50%")
-    _, user = backend.call.call_args[0]
+    _, user = backend.call.call_args.args
     assert "TOTAL 10 5 50%" in user
 
 
@@ -90,3 +90,9 @@ def test_extract_json_fallback_no_code_fence(agent, backend):
     result = agent.plan("story")
     assert isinstance(result, list)
     assert result[0]["task"] == "t1"
+
+
+def test_extract_json_raises_on_no_json(agent, backend):
+    backend.call.return_value = "This is plain text with no JSON at all."
+    with pytest.raises(ValueError, match="No JSON found"):
+        agent.plan("story")
