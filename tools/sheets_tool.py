@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 COLUMNS = ["Story ID", "Story Title", "Task", "Status", "Updated At"]
+TASK_COLUMNS = ["Story ID", "Story Title", "Task #", "Task Name", "Description", "Status", "Updated At"]
 
 
 class SheetsTool:
@@ -59,3 +60,65 @@ class SheetsTool:
     def get_all_story_ids(self) -> list[str]:
         records = self._sheet.get_all_records()
         return [r["Story ID"] for r in records if r.get("Story ID")]
+
+    @property
+    def _tasks_sheet(self) -> gspread.Worksheet:
+        if not hasattr(self, "_tasks_ws"):
+            tasks_name = self._sheet.title + " Tasks"
+            try:
+                self._tasks_ws = self._spreadsheet.worksheet(tasks_name)
+            except gspread.WorksheetNotFound:
+                self._tasks_ws = self._spreadsheet.add_worksheet(
+                    tasks_name, rows=1000, cols=len(TASK_COLUMNS)
+                )
+                self._tasks_ws.append_row(TASK_COLUMNS)
+                logger.info("Created tasks sheet: %s", tasks_name)
+        return self._tasks_ws
+
+    def write_tasks(self, story_id: str, story_title: str, tasks: list[dict]) -> None:
+        now = self._now()
+        for i, task in enumerate(tasks, start=1):
+            self._tasks_sheet.append_row([
+                story_id,
+                story_title,
+                i,
+                task["task"],
+                task["description"],
+                "Pending",
+                now,
+            ])
+        logger.info("Wrote %d task rows for %s", len(tasks), story_id)
+
+    def _find_task_row(self, story_id: str, task_name: str) -> int | None:
+        records = self._tasks_sheet.get_all_records()
+        for i, row in enumerate(records, start=2):
+            if row.get("Story ID") == story_id and row.get("Task Name") == task_name:
+                return i
+        return None
+
+    def get_task_status(self, story_id: str, task_name: str) -> str:
+        records = self._tasks_sheet.get_all_records()
+        for row in records:
+            if row.get("Story ID") == story_id and row.get("Task Name") == task_name:
+                return str(row.get("Status", "Pending"))
+        return "Pending"
+
+    def update_task_status(self, story_id: str, task_name: str, status: str) -> None:
+        row_num = self._find_task_row(story_id, task_name)
+        if not row_num:
+            logger.warning("Task row not found: %s / %s", story_id, task_name)
+            return
+        self._tasks_sheet.update_cell(row_num, 6, status)
+        self._tasks_sheet.update_cell(row_num, 7, self._now())
+        logger.info("Task status: %s / %s → %s", story_id, task_name, status)
+
+    def clear_tasks(self, story_id: str) -> None:
+        records = self._tasks_sheet.get_all_records()
+        row_nums = [
+            i + 2
+            for i, row in enumerate(records)
+            if row.get("Story ID") == story_id
+        ]
+        for row_num in reversed(row_nums):
+            self._tasks_sheet.delete_rows(row_num)
+        logger.info("Cleared %d task rows for %s", len(row_nums), story_id)
