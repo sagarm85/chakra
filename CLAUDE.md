@@ -8,30 +8,41 @@ Agentic SDLC loop: user story → GitHub PR via Claude.
 
 ## Entry point
 ```bash
-export GITHUB_TOKEN=...
-export ANTHROPIC_API_KEY=...   # required when backend=anthropic-api (default)
-python orchestrator.py story.txt
+# After install:
+pipx install chakra-sdlc
+chakra init
+chakra run story.txt           # or: chakra run "inline story text"
+
+# Development (from repo root):
+pip install -e ".[dev]"
+chakra run story.txt
 ```
 
-Set `backend: claude-cli` in `chakra.yaml` to use the Claude CLI subprocess backend instead of the Anthropic SDK (no `ANTHROPIC_API_KEY` needed; requires a Claude subscription and `claude` on your PATH).
-
 ## Setup
-1. `pip install -r requirements.txt`
-2. Copy `chakra.yaml` and fill in `github.repo` and `google.spreadsheet_id`
-3. **GitHub token** — create a Personal Access Token with scopes: `repo`, `workflow`. Export as `GITHUB_TOKEN`
+1. `pip install -e ".[dev]"` (development) or `pipx install chakra-sdlc` (end-user)
+2. Run `chakra init` to create `~/.config/chakra/config.yaml` interactively
+3. **GitHub token** — create a Personal Access Token with scopes: `repo`, `workflow`. Enter when prompted by `chakra init` or export as `GITHUB_TOKEN`
 4. **Google credentials** — create a Google Cloud project, enable the Sheets API, create a Service Account, download the JSON key as `credentials.json`, then share your target Google Sheet with the service account email
-5. Export `ANTHROPIC_API_KEY`
+5. **Anthropic API key** — required when `backend: anthropic-api` (default). Enter when prompted by `chakra init` or export as `ANTHROPIC_API_KEY`
 
 > Note: `credentials.json` and `.env` are git-ignored. Never commit them.
 
 ## Commands
 
 ```bash
+# Install in dev mode
+pip install -e ".[dev]"
+
+# Run the CLI
+chakra init
+chakra run story.txt
+chakra run "Add user login"
+
 # Run all tests
 pytest
 
 # Run tests with coverage report
-pytest --cov=. --cov-report=term-missing
+pytest --cov=src/chakra --cov-report=term-missing
 
 # Run a single test file
 pytest tests/test_orchestrator.py
@@ -43,19 +54,24 @@ pytest tests/test_orchestrator.py::test_happy_path_calls_all_steps
 ## Architecture
 
 ```
-orchestrator.py          — top-level entry point; orchestrates the SDLC phases in sequence
-agents/
-  sdlc_agent.py          — SDLCAgent: orchestrates plan/code/test/measure_coverage via an AgentBackend
-  backend.py             — AgentBackend Protocol (runtime_checkable)
-  anthropic_backend.py   — AnthropicBackend: calls Anthropic SDK (requires ANTHROPIC_API_KEY)
-  claude_cli_backend.py  — ClaudeCliBackend: calls `claude -p` subprocess (requires Claude subscription)
-tools/
-  config.py              — load_config() parses chakra.yaml into typed dataclasses
-  approval_tool.py       — CLI prompt_approval(); raises ApprovalRejected with user feedback
-  checkpoint_tool.py     — save/load/clear *.chakra.json checkpoint files keyed by story path
-  github_tool.py         — GitHubTool: branch, commit, PR, poll merge, trigger CI workflow
-  sheets_tool.py         — SheetsTool: upsert/update story rows in Google Sheets
-  logger.py              — setup_logging() configures rotating DEBUG log to logs/chakra.log
+src/chakra/
+  __init__.py            — package version
+  __main__.py            — enables `python -m chakra`
+  cli.py                 — Click CLI entry point: `chakra init` and `chakra run`
+  config_wizard.py       — interactive first-run wizard; writes ~/.config/chakra/config.yaml
+  orchestrator.py        — top-level orchestrator; runs SDLC phases in sequence
+  agents/
+    sdlc_agent.py        — SDLCAgent: orchestrates plan/code/test/measure_coverage via an AgentBackend
+    backend.py           — AgentBackend Protocol (runtime_checkable)
+    anthropic_backend.py — AnthropicBackend: calls Anthropic SDK (requires ANTHROPIC_API_KEY)
+    claude_cli_backend.py — ClaudeCliBackend: calls `claude -p` subprocess (requires Claude subscription)
+  tools/
+    config.py            — load_config() parses chakra config YAML into typed dataclasses
+    approval_tool.py     — CLI prompt_approval(); raises ApprovalRejected with user feedback
+    checkpoint_tool.py   — save/load/clear *.chakra.json checkpoint files keyed by story path
+    github_tool.py       — GitHubTool: branch, commit, PR, poll merge, trigger CI workflow
+    sheets_tool.py       — SheetsTool: upsert/update story rows in Google Sheets
+    logger.py            — setup_logging() configures rotating DEBUG log to logs/chakra.log
 ```
 
 ### Phase flow
