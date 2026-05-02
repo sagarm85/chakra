@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock
-from agents.sdlc_agent import SDLCAgent
+from chakra.agents.sdlc_agent import SDLCAgent
 
 
 PLAN_RESPONSE = '```json\n[{"task": "setup", "description": "Create project structure"}]\n```'

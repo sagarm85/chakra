@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from agents.backend import AgentBackend
+from chakra.agents.backend import AgentBackend
 
 logger = logging.getLogger(__name__)
 
