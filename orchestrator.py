@@ -114,6 +114,12 @@ def run(story_path: str) -> None:
         suffix = f"-v{attempt+1}" if attempt > 0 else ""
         branch_name = f"chakra/{story_id}-{_slugify(story_title)}{suffix}"
         github.create_branch(branch_name, config.github.base_branch)
+        # GitHub requires at least one commit before a PR can be opened
+        github.commit_files(
+            branch_name,
+            {".chakra/plan.md": f"# {story_id}: {story_title}\n\n{plan_text}\n"},
+            f"chore({story_id}): initialize branch with task plan",
+        )
         pr_url, pr_number = github.open_draft_pr(
             branch_name,
             config.github.base_branch,

@@ -103,8 +103,8 @@ def test_each_task_gets_its_own_commit(tmp_path, mock_config, mock_tools):
         {"src/routes.py": "y=2"},
     ]
     _run_with_mocks(tmp_path, mock_config, github, sheets, agent)
-    # commit_files called once per task + once for tests
-    assert github.commit_files.call_count == 3
+    # commit_files: 1 placeholder + 1 per task + 1 for tests
+    assert github.commit_files.call_count == 4
 
 
 def test_rejection_collects_feedback_and_replans(tmp_path, mock_config, mock_tools):
