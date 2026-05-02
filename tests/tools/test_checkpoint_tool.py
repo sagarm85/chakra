@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 import pytest
-from tools.checkpoint_tool import save, load, clear, story_hash, checkpoint_path
+from chakra.tools.checkpoint_tool import save, load, clear, story_hash, checkpoint_path
 
 
 def test_story_hash_is_deterministic():

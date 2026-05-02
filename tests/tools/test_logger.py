@@ -1,7 +1,7 @@
 import logging
 import logging.handlers
 from pathlib import Path
-from tools.logger import setup_logging
+from chakra.tools.logger import setup_logging
 
 
 def test_setup_logging_creates_logs_dir(tmp_path, monkeypatch):

@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from tools.sheets_tool import SheetsTool
+from chakra.tools.sheets_tool import SheetsTool
 
 
 @pytest.fixture
@@ -12,8 +12,8 @@ def mock_worksheet():
 
 @pytest.fixture
 def sheets_tool(mock_worksheet):
-    with patch("tools.sheets_tool.gspread") as mock_gspread, \
-         patch("tools.sheets_tool.Credentials"):
+    with patch("chakra.tools.sheets_tool.gspread") as mock_gspread, \
+         patch("chakra.tools.sheets_tool.Credentials"):
         mock_client = MagicMock()
         mock_gspread.authorize.return_value = mock_client
         mock_spreadsheet = MagicMock()
@@ -94,8 +94,8 @@ def test_get_or_create_sheet_creates_when_not_found():
     """Cover the WorksheetNotFound branch in _get_or_create_sheet (lines 23-26)."""
     import gspread as _gspread
     new_ws = MagicMock()
-    with patch("tools.sheets_tool.gspread") as mock_gspread, \
-         patch("tools.sheets_tool.Credentials"):
+    with patch("chakra.tools.sheets_tool.gspread") as mock_gspread, \
+         patch("chakra.tools.sheets_tool.Credentials"):
         mock_client = MagicMock()
         mock_gspread.authorize.return_value = mock_client
         mock_gspread.WorksheetNotFound = _gspread.WorksheetNotFound
@@ -127,8 +127,8 @@ def tasks_worksheet():
 
 @pytest.fixture
 def sheets_tool_with_tasks(mock_worksheet, tasks_worksheet):
-    with patch("tools.sheets_tool.gspread") as mock_gspread, \
-         patch("tools.sheets_tool.Credentials"):
+    with patch("chakra.tools.sheets_tool.gspread") as mock_gspread, \
+         patch("chakra.tools.sheets_tool.Credentials"):
         mock_client = MagicMock()
         mock_gspread.authorize.return_value = mock_client
         mock_spreadsheet = MagicMock()
@@ -195,8 +195,8 @@ def test_clear_tasks_deletes_rows_for_story(sheets_tool_with_tasks, tasks_worksh
 def test_tasks_sheet_creates_worksheet_when_not_found(mock_worksheet):
     import gspread as _gspread
     new_ws = MagicMock()
-    with patch("tools.sheets_tool.gspread") as mock_gspread, \
-         patch("tools.sheets_tool.Credentials"):
+    with patch("chakra.tools.sheets_tool.gspread") as mock_gspread, \
+         patch("chakra.tools.sheets_tool.Credentials"):
         mock_client = MagicMock()
         mock_gspread.authorize.return_value = mock_client
         mock_gspread.WorksheetNotFound = _gspread.WorksheetNotFound

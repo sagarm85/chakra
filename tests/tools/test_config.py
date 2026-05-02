@@ -1,6 +1,6 @@
 import pytest
 import yaml
-from tools.config import load_config, Config, GitHubConfig, AnthropicConfig, GoogleConfig, TrackerConfig, StoryConfig, ClaudeCliConfig
+from chakra.tools.config import load_config, Config, GitHubConfig, AnthropicConfig, GoogleConfig, TrackerConfig, StoryConfig, ClaudeCliConfig
 
 
 VALID_YAML = """

@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch
-from tools.approval_tool import prompt_approval, ApprovalRejected
+from chakra.tools.approval_tool import prompt_approval, ApprovalRejected
 
 
 def test_prompt_approval_y_returns_true():
