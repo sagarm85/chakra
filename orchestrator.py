@@ -2,10 +2,12 @@ import logging
 import os
 import re
 import sys
+import time
 from pathlib import Path
 
+from agents.anthropic_backend import AnthropicBackend
+from agents.claude_cli_backend import ClaudeCliBackend
 from agents.sdlc_agent import SDLCAgent
-from tools.approval_tool import ApprovalRejected, prompt_approval
 from tools.checkpoint_tool import (
     clear as _checkpoint_clear,
     load as _checkpoint_load,
@@ -18,6 +20,7 @@ from tools.logger import setup_logging
 from tools.sheets_tool import SheetsTool
 
 MAX_RETRIES = 3
+POLL_INTERVAL = 5  # seconds between sheet status checks
 
 
 def _slugify(text: str) -> str:
@@ -35,6 +38,20 @@ def _next_story_id(prefix: str, sheets: SheetsTool) -> str:
     return f"{prefix}-{next_num:03d}"
 
 
+def _poll_task_approval(
+    sheets: SheetsTool,
+    story_id: str,
+    task_name: str,
+    poll_interval: int = POLL_INTERVAL,
+) -> str:
+    """Poll until task status is Approved or Rejected. Returns the status string."""
+    while True:
+        status = sheets.get_task_status(story_id, task_name)
+        if status in ("Approved", "Rejected"):
+            return status
+        time.sleep(poll_interval)
+
+
 def run(story_path: str) -> None:
     setup_logging()
     logger = logging.getLogger(__name__)
@@ -49,129 +66,153 @@ def run(story_path: str) -> None:
         config.google.spreadsheet_id,
         config.tracker.sheet_name,
     )
-    agent = SDLCAgent(os.environ["ANTHROPIC_API_KEY"], config.anthropic.model)
 
-    # Checkpoint / resume
-    current_hash = _story_hash(story)
-    checkpoint = _checkpoint_load(story_path)
-    resume_phase = None
-    tasks: list[dict] = []
-    code_files: dict[str, str] = {}
-    test_files: dict[str, str] = {}
-    plan_text = ""
-
-    if checkpoint:
-        if checkpoint.get("story_hash") != current_hash:
-            logger.warning("Story changed since checkpoint — starting fresh")
-            _checkpoint_clear(story_path)
-            checkpoint = None
-        elif not all(k in checkpoint for k in ("phase_reached", "story_id")):
-            logger.warning("Incomplete checkpoint — starting fresh")
-            _checkpoint_clear(story_path)
-            checkpoint = None
-        else:
-            resume_phase = checkpoint["phase_reached"]
-            story_id = checkpoint["story_id"]
-            tasks = checkpoint.get("tasks", [])
-            code_files = checkpoint.get("code_files", {})
-            test_files = checkpoint.get("test_files", {})
-            plan_text = "\n".join(
-                f"  {i + 1}. {t['task']}: {t['description']}" for i, t in enumerate(tasks)
+    if config.backend == "claude-cli":
+        backend = ClaudeCliBackend(
+            model=config.claude_cli.model,
+            timeout=config.claude_cli.timeout,
+        )
+    else:
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise ValueError(
+                "ANTHROPIC_API_KEY environment variable is required for anthropic-api backend"
             )
-            logger.info("Resuming %s from phase: %s", story_id, resume_phase)
-            print(f"Resuming {story_id} from {resume_phase} phase.")
+        backend = AnthropicBackend(api_key=api_key, model=config.anthropic.model)
+    agent = SDLCAgent(backend)
 
-    if not checkpoint:
-        story_id = _next_story_id(config.story.id_prefix, sheets)
-        logger.info("Starting SDLC loop: %s — %s", story_id, story_title)
-
+    current_hash = _story_hash(story)
+    story_id = _next_story_id(config.story.id_prefix, sheets)
+    logger.info("Starting SDLC loop: %s — %s", story_id, story_title)
     sheets.upsert_row(story_id, story_title, "overall", "Pending")
 
-    # Planning phase
-    if resume_phase not in {"planning", "coding", "testing"}:
+    rejection_feedback = ""
+    accumulated_files: dict[str, str] = {}
+    tasks: list[dict] = []
+    branch_name = ""
+    pr_url = ""
+    pr_number = 0
+
+    for attempt in range(MAX_RETRIES):
+        # ── Planning ──────────────────────────────────────────────────────
         sheets.update_status(story_id, "overall", "Planning")
-        rejection_feedback = ""
-        for attempt in range(MAX_RETRIES):
-            tasks = agent.plan(story, rejection_feedback=rejection_feedback)
-            plan_text = "\n".join(
-                f"  {i + 1}. {t['task']}: {t['description']}" for i, t in enumerate(tasks)
-            )
-            try:
-                prompt_approval(f"Planning — {story_id}", plan_text)
-                logger.info("Plan approved on attempt %d", attempt + 1)
-                break
-            except ApprovalRejected as e:
-                rejection_feedback = e.reason
-                logger.warning("Plan rejected (attempt %d/%d): %s", attempt + 1, MAX_RETRIES, e.reason)
-                if attempt == MAX_RETRIES - 1:
-                    logger.error("Planning rejected %d times, aborting", MAX_RETRIES)
-                    sys.exit(1)
-        _checkpoint_save(story_path, {
-            "story_id": story_id,
-            "story_hash": current_hash,
-            "phase_reached": "planning",
-            "tasks": tasks,
-        })
+        tasks = agent.plan(story, rejection_feedback=rejection_feedback)
+        plan_text = "\n".join(
+            f"  {i+1}. {t['task']}: {t['description']}"
+            for i, t in enumerate(tasks)
+        )
+        print(f"\n{'='*60}")
+        print(f"  Plan — {story_id} (attempt {attempt+1}/{MAX_RETRIES})")
+        print(f"{'='*60}\n{plan_text}\n{'='*60}\n")
+        logger.info("Planned %d tasks (attempt %d)", len(tasks), attempt + 1)
 
-    # Coding phase
-    if resume_phase not in {"coding", "testing"}:
+        # Write tasks to Sheet (clear previous attempt rows if re-planning)
+        sheets.clear_tasks(story_id)
+        sheets.write_tasks(story_id, story_title, tasks)
+
+        # Create branch + Draft PR
+        suffix = f"-v{attempt+1}" if attempt > 0 else ""
+        branch_name = f"chakra/{story_id}-{_slugify(story_title)}{suffix}"
+        github.create_branch(branch_name, config.github.base_branch)
+        # GitHub requires at least one commit before a PR can be opened
+        github.commit_files(
+            branch_name,
+            {".chakra/plan.md": f"# {story_id}: {story_title}\n\n{plan_text}\n"},
+            f"chore({story_id}): initialize branch with task plan",
+        )
+        pr_url, pr_number = github.open_draft_pr(
+            branch_name,
+            config.github.base_branch,
+            f"[{story_id}] {story_title}",
+            (
+                f"Draft — approve tasks in Google Sheets to begin coding.\n\n"
+                f"**Story:**\n{story}\n\n**Tasks:**\n{plan_text}"
+            ),
+        )
         sheets.update_status(story_id, "overall", "Coding")
-        logger.info("Generating code for %d tasks", len(tasks))
-        code_files = agent.code(story, tasks)
-        _checkpoint_save(story_path, {
-            "story_id": story_id,
-            "story_hash": current_hash,
-            "phase_reached": "coding",
-            "tasks": tasks,
-            "code_files": code_files,
-        })
+        print(f"Draft PR: {pr_url}")
+        print("Approve tasks one-by-one in Google Sheets.\n")
 
-    # Testing phase
-    if resume_phase != "testing":
-        sheets.update_status(story_id, "overall", "Testing")
-        coverage_feedback = ""
-        for attempt in range(MAX_RETRIES):
-            test_files = agent.test(story, code_files, coverage_feedback=coverage_feedback)
-            coverage, report = agent.measure_coverage(code_files, test_files)
-            logger.info("Coverage attempt %d/%d: %.0f%%", attempt + 1, MAX_RETRIES, coverage)
-            if coverage >= 95.0:
+        accumulated_files = {}
+        rejected = False
+
+        for task in tasks:
+            task_name = task["task"]
+            print(f"⏳  Waiting: {task_name}")
+            status = _poll_task_approval(sheets, story_id, task_name)
+
+            if status == "Rejected":
+                rejected = True
+                remaining = [t["task"] for t in tasks[tasks.index(task) + 1:]]
+                if remaining:
+                    print(f"\n❌  '{task_name}' rejected. Skipping: {', '.join(remaining)}")
+                else:
+                    print(f"\n❌  '{task_name}' rejected.")
+                rejection_feedback = input(
+                    "\nFeedback for re-planning (press Enter to abort): "
+                ).strip()
+                if not rejection_feedback:
+                    logger.error("No feedback provided after rejection — aborting")
+                    sys.exit(1)
                 break
-            coverage_feedback = report
-            if attempt == MAX_RETRIES - 1:
-                logger.error("Coverage %.0f%% below 95%% after %d retries, aborting", coverage, MAX_RETRIES)
-                sys.exit(1)
-        _checkpoint_save(story_path, {
-            "story_id": story_id,
-            "story_hash": current_hash,
-            "phase_reached": "testing",
-            "tasks": tasks,
-            "code_files": code_files,
-            "test_files": test_files,
-        })
 
-    # GitHub: branch, commit, PR
-    branch_name = f"chakra/{story_id}-{_slugify(story_title)}"
-    github.create_branch(branch_name, config.github.base_branch)
-    all_files = {**code_files, **test_files}
-    github.commit_files(branch_name, all_files, f"feat({story_id}): {story_title}")
-    pr_url, pr_number = github.open_pr(
-        branch_name,
-        config.github.base_branch,
-        f"[{story_id}] {story_title}",
-        f"Generated by Chakra.\n\n**Story:**\n{story}\n\n**Tasks:**\n{plan_text}",
-    )
-    sheets.update_status(story_id, "overall", "PR Created")
-    logger.info("PR opened: %s", pr_url)
-    print(f"\nPR: {pr_url}")
-    print("Waiting for PR to be merged...")
+            # Task approved — generate code, commit, update Sheet
+            sheets.update_task_status(story_id, task_name, "In Progress")
+            print(f"▶   Coding: {task_name}")
+            new_files = agent.code_task(story, task, accumulated_files)
+            accumulated_files.update(new_files)
+            github.commit_files(
+                branch_name, new_files, f"feat({story_id}): {task_name}"
+            )
+            sheets.update_task_status(story_id, task_name, "Done")
+            print(f"✓   Done: {task_name}")
 
-    # Wait for merge, trigger CI/CD, mark done
-    github.poll_merge(pr_number)
-    github.trigger_cicd(config.github.ci_workflow, config.github.base_branch)
-    sheets.update_status(story_id, "overall", "Done")
+            _checkpoint_save(story_path, {
+                "story_hash": current_hash,
+                "story_id": story_id,
+                "phase_reached": "coding",
+                "tasks": tasks,
+                "completed_tasks": [
+                    t["task"] for t in tasks[: tasks.index(task) + 1]
+                ],
+                "accumulated_files": accumulated_files,
+                "branch_name": branch_name,
+                "pr_number": pr_number,
+            })
+
+        if not rejected:
+            break  # All tasks coded — proceed to testing
+
+        if attempt == MAX_RETRIES - 1:
+            logger.error("Max retries reached after task rejections — aborting")
+            sys.exit(1)
+
+    # ── Testing ───────────────────────────────────────────────────────────
+    sheets.update_status(story_id, "overall", "Testing")
+    coverage_feedback = ""
+    test_files: dict[str, str] = {}
+    for attempt in range(MAX_RETRIES):
+        test_files = agent.test(story, accumulated_files, coverage_feedback=coverage_feedback)
+        coverage, report = agent.measure_coverage(accumulated_files, test_files)
+        logger.info("Coverage attempt %d/%d: %.0f%%", attempt + 1, MAX_RETRIES, coverage)
+        if coverage >= 95.0:
+            break
+        coverage_feedback = report
+        if attempt == MAX_RETRIES - 1:
+            logger.error(
+                "Coverage %.0f%% below 95%% after %d retries — aborting",
+                coverage, MAX_RETRIES,
+            )
+            sys.exit(1)
+
+    github.commit_files(branch_name, test_files, f"test({story_id}): add test suite")
+
+    # ── Mark PR Ready ─────────────────────────────────────────────────────
+    github.mark_pr_ready(pr_number)
+    sheets.update_status(story_id, "overall", "PR Ready")
     _checkpoint_clear(story_path)
     logger.info("SDLC loop complete: %s", story_id)
-    print(f"\nDone! {story_id} complete.")
+    print(f"\nDone! PR ready for review: {pr_url}")
 
 
 if __name__ == "__main__":

@@ -99,3 +99,51 @@ def test_trigger_cicd_dispatches_workflow(github_tool, mock_repo):
     github_tool.trigger_cicd("ci.yml", "main")
     mock_repo.get_workflow.assert_called_once_with("ci.yml")
     mock_workflow.create_dispatch.assert_called_once_with("main")
+
+
+def test_open_draft_pr_creates_draft_pull(github_tool, mock_repo):
+    mock_pr = MagicMock()
+    mock_pr.html_url = "https://github.com/owner/repo/pull/10"
+    mock_pr.number = 10
+    mock_repo.create_pull.return_value = mock_pr
+    url, number = github_tool.open_draft_pr("chakra/branch", "main", "Draft title", "body")
+    mock_repo.create_pull.assert_called_once_with(
+        title="Draft title", body="body", head="chakra/branch", base="main", draft=True
+    )
+    assert url == "https://github.com/owner/repo/pull/10"
+    assert number == 10
+
+
+def test_mark_pr_ready_calls_graphql(github_tool, mock_repo):
+    mock_pr = MagicMock()
+    mock_pr.node_id = "PR_kwAB"
+    mock_repo.get_pull.return_value = mock_pr
+    with patch("tools.github_tool.requests.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "data": {"markPullRequestReadyForReview": {"pullRequest": {"isDraft": False}}}
+        }
+        mock_post.return_value = mock_resp
+        github_tool.mark_pr_ready(10)
+    mock_post.assert_called_once()
+    call_kwargs = mock_post.call_args[1]
+    assert "markPullRequestReadyForReview" in call_kwargs["json"]["query"]
+    assert call_kwargs["json"]["variables"]["id"] == "PR_kwAB"
+
+
+def test_mark_pr_ready_raises_on_graphql_error(github_tool, mock_repo):
+    mock_pr = MagicMock()
+    mock_pr.node_id = "PR_kwAB"
+    mock_repo.get_pull.return_value = mock_pr
+    with patch("tools.github_tool.requests.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"errors": [{"message": "not allowed"}]}
+        mock_post.return_value = mock_resp
+        with pytest.raises(RuntimeError, match="GraphQL error"):
+            github_tool.mark_pr_ready(10)
+
+
+def test_github_tool_stores_token():
+    with patch("tools.github_tool.Github"):
+        tool = GitHubTool("my-secret-token", "owner/repo")
+    assert tool._token == "my-secret-token"
