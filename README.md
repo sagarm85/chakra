@@ -6,24 +6,30 @@ Agentic SDLC loop: drop in a user story, get a GitHub PR — autonomously planne
 python3 orchestrator.py story.txt
 ```
 
+![Chakra Agentic SDLC Loop](docs/chakra_cicd.png)
+
 ---
 
 ## How It Works
 
 1. Reads `story.txt` (plain text user story, first line used as title)
-2. Claude breaks it into tasks — you review and approve in the terminal
-3. Claude writes the code and tests (≥95% coverage enforced automatically)
-4. Opens a GitHub PR with all generated files
-5. Waits for the PR to be merged, then triggers CI/CD
-6. Marks the story **Done** in your Google Sheets tracker
+2. Claude breaks the story into tasks and writes them to a **Google Sheets Tasks tab**
+3. A **Draft PR** is opened immediately so you can track progress
+4. For each task, the orchestrator **polls Google Sheets** — set a task row to `Approved` to trigger coding, or `Rejected` to trigger re-planning
+5. Claude generates code per task and commits directly to the PR branch
+6. After all tasks are coded, Claude writes tests (≥95% coverage enforced)
+7. The PR is **promoted from Draft to Ready for Review**
+8. Google Sheets story status is updated to `PR Ready`
 
 ---
 
 ## Prerequisites
 
 - Python 3.12+
-- A GitHub Personal Access Token
-- An Anthropic API key
+- A GitHub Personal Access Token (scopes: `repo`, `workflow`)
+- **One of:**
+  - A Claude subscription with `claude` CLI on your PATH *(default — no API key needed)*
+  - An Anthropic API key (set `backend: anthropic-api` in `chakra.yaml`)
 - A Google Cloud service account with Sheets API access
 
 ---
@@ -46,8 +52,15 @@ github:
   base_branch: "main"
   ci_workflow: "ci.yml"            # workflow file to trigger on merge
 
+# Backend: "claude-cli" (default) or "anthropic-api"
+backend: "claude-cli"
+
+claude_cli:
+  model: null       # null = use the CLI's default model
+  timeout: 300      # seconds before subprocess times out
+
 anthropic:
-  model: "claude-opus-4-7"
+  model: "claude-opus-4-7"   # used only when backend: anthropic-api
 
 google:
   credentials_path: "./credentials.json"
@@ -70,7 +83,21 @@ Required scopes: `repo`, `workflow`
 export GITHUB_TOKEN=your_token_here
 ```
 
-### 4. Anthropic API Key
+### 4. Backend credentials
+
+#### Option A — Claude CLI (default)
+
+Ensure the `claude` CLI is installed and logged in:
+
+```bash
+claude --version   # confirm it's on your PATH
+```
+
+No API key needed — Chakra calls `claude -p` as a subprocess.
+
+#### Option B — Anthropic API
+
+Set `backend: anthropic-api` in `chakra.yaml`, then:
 
 ```bash
 export ANTHROPIC_API_KEY=your_key_here
@@ -94,7 +121,7 @@ export ANTHROPIC_API_KEY=your_key_here
 #### d. Download the JSON key
 - Click the service account → **Keys** tab → **Add Key → Create new key → JSON**
 - Rename the downloaded file to `credentials.json`
-- Place it in the project root (it is already git-ignored — safe to commit other files)
+- Place it in the project root (it is already git-ignored)
 
 #### e. Find your Spreadsheet ID
 Open your Google Sheet in a browser. The ID is the long string in the URL:
@@ -116,8 +143,13 @@ Paste it into `chakra.yaml` under `google.spreadsheet_id`.
 
 ```bash
 export GITHUB_TOKEN=...
+python3 orchestrator.py story.txt           # claude-cli backend (default)
+
+# — or —
+
+export GITHUB_TOKEN=...
 export ANTHROPIC_API_KEY=...
-python3 orchestrator.py story.txt
+python3 orchestrator.py story.txt           # set backend: anthropic-api in chakra.yaml
 ```
 
 **Example `story.txt`:**
@@ -130,14 +162,46 @@ log in, and receive a JWT token on success.
 
 ---
 
+## Approving Tasks in Google Sheets
+
+After planning, Chakra writes each task to a **`Chakra Tracker Tasks`** sheet tab:
+
+| Story ID | Story Title | Task # | Task Name | Description | Status | Updated At |
+|----------|-------------|--------|-----------|-------------|--------|------------|
+
+For each task in order, Chakra polls until you set **Status** to one of:
+
+| Status | Effect |
+|--------|--------|
+| `Approved` | Coding begins for this task |
+| `Rejected` | Coding is skipped; orchestrator prompts for feedback and re-plans |
+
+When a task is being coded its status changes to `In Progress`, then `Done` on completion.
+
+---
+
 ## Tracker (Google Sheets)
 
-The sheet is auto-created on first run with these columns:
+Two sheet tabs are managed automatically:
+
+**`Chakra Tracker`** — overall story status
 
 | Story ID | Story Title | Task | Status | Updated At |
 |----------|-------------|------|--------|------------|
 
-Status lifecycle: `Pending → Planning → Coding → Testing → PR Created → Done`
+Overall status lifecycle: `Pending → Planning → Coding → Testing → PR Ready`
+
+**`Chakra Tracker Tasks`** — per-task approval queue (see above)
+
+---
+
+## Draft PR Workflow
+
+Chakra opens a **Draft PR** immediately after planning, before any code is written:
+
+1. `Draft PR opened` — includes the plan in the PR body; you can review before approving tasks
+2. Tasks are approved and coded one-by-one; each commit appears on the PR branch as it lands
+3. `Marked Ready for Review` — once all tasks are coded and tests pass
 
 ---
 
@@ -156,23 +220,15 @@ tail -f logs/chakra.log
 
 ## Checkpoint & Resume
 
-Chakra saves a checkpoint file (`story.chakra.json`) next to your story file after each phase completes. If a run fails or is interrupted, the next run resumes from the last successful phase — no re-planning, no re-approval prompt.
+Chakra saves a checkpoint file (`story.chakra.json`) next to your story file after each task completes. If a run fails or is interrupted, the next run resumes from the last successful task.
 
-| Checkpoint `phase_reached` | What is skipped on next run |
-|---|---|
-| `planning` | Planning + human approval |
-| `coding` | Planning + coding |
-| `testing` | Planning + coding + testing |
+If you edit `story.txt` between runs, Chakra detects the content change (via SHA-256 hash), discards the old checkpoint, and starts fresh automatically.
 
-The checkpoint file is deleted automatically when the run completes successfully.
-
-**To force a fresh run** (re-plan from scratch):
+**To force a fresh run:**
 ```bash
 rm story.chakra.json
 python3 orchestrator.py story.txt
 ```
-
-If you edit `story.txt` between runs, Chakra detects the content change (via SHA-256 hash), discards the old checkpoint, and starts fresh automatically.
 
 ---
 
@@ -192,17 +248,20 @@ If you edit `story.txt` between runs, Chakra detects the content change (via SHA
 
 ```
 chakra/
-├── orchestrator.py          # entry point
+├── orchestrator.py          # entry point; per-task sheet-driven approval loop
 ├── chakra.yaml              # configuration
 ├── CLAUDE.md                # Claude Code context
 ├── requirements.txt
 ├── agents/
-│   └── sdlc_agent.py        # Claude API: plan / code / test
+│   ├── sdlc_agent.py        # plan / code_task / test / measure_coverage
+│   ├── backend.py           # AgentBackend Protocol (runtime_checkable)
+│   ├── anthropic_backend.py # AnthropicBackend: Anthropic SDK (requires API key)
+│   └── claude_cli_backend.py# ClaudeCliBackend: `claude -p` subprocess
 └── tools/
     ├── config.py            # config loader
     ├── logger.py            # logging setup
-    ├── approval_tool.py     # terminal approval prompt
+    ├── approval_tool.py     # terminal re-plan feedback prompt
     ├── checkpoint_tool.py   # phase checkpoint save/load/clear
-    ├── github_tool.py       # GitHub branch / PR / CI
-    └── sheets_tool.py       # Google Sheets tracker
+    ├── github_tool.py       # branch / commit / draft PR / mark ready / CI
+    └── sheets_tool.py       # story tracker + per-task approval sheet
 ```
