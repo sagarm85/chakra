@@ -5,19 +5,19 @@ import sys
 import time
 from pathlib import Path
 
-from agents.anthropic_backend import AnthropicBackend
-from agents.claude_cli_backend import ClaudeCliBackend
-from agents.sdlc_agent import SDLCAgent
-from tools.checkpoint_tool import (
+from chakra.agents.anthropic_backend import AnthropicBackend
+from chakra.agents.claude_cli_backend import ClaudeCliBackend
+from chakra.agents.sdlc_agent import SDLCAgent
+from chakra.tools.checkpoint_tool import (
     clear as _checkpoint_clear,
     load as _checkpoint_load,
     save as _checkpoint_save,
     story_hash as _story_hash,
 )
-from tools.config import load_config
-from tools.github_tool import GitHubTool
-from tools.logger import setup_logging
-from tools.sheets_tool import SheetsTool
+from chakra.tools.config import load_config
+from chakra.tools.github_tool import GitHubTool
+from chakra.tools.logger import setup_logging
+from chakra.tools.sheets_tool import SheetsTool
 
 MAX_RETRIES = 3
 POLL_INTERVAL = 5  # seconds between sheet status checks
@@ -52,11 +52,12 @@ def _poll_task_approval(
         time.sleep(poll_interval)
 
 
-def run(story_path: str) -> None:
+def run(story_path: str, config=None) -> None:
     setup_logging()
     logger = logging.getLogger(__name__)
 
-    config = load_config("chakra.yaml")
+    if config is None:
+        config = load_config()
     story = Path(story_path).read_text().strip()
     story_title = story.split("\n")[0][:60]
 

@@ -1,13 +1,13 @@
 import sys
 import pytest
 from unittest.mock import MagicMock, patch, call
-import orchestrator
-from tools.checkpoint_tool import story_hash as _story_hash
+from chakra import orchestrator
+from chakra.tools.checkpoint_tool import story_hash as _story_hash
 
 
 @pytest.fixture
 def mock_config():
-    from tools.config import (
+    from chakra.tools.config import (
         Config, GitHubConfig, AnthropicConfig, GoogleConfig,
         TrackerConfig, StoryConfig, ClaudeCliConfig,
     )
@@ -41,13 +41,13 @@ def mock_tools():
 def _run_with_mocks(tmp_path, mock_config, github, sheets, agent, story_text="As a user I want X"):
     story_file = tmp_path / "story.txt"
     story_file.write_text(story_text)
-    with patch("orchestrator.load_config", return_value=mock_config), \
-         patch("orchestrator.setup_logging"), \
-         patch("orchestrator.GitHubTool", return_value=github), \
-         patch("orchestrator.SheetsTool", return_value=sheets), \
-         patch("orchestrator.SDLCAgent", return_value=agent), \
-         patch("orchestrator.AnthropicBackend"), \
-         patch("orchestrator._poll_task_approval", return_value="Approved"), \
+    with patch("chakra.orchestrator.load_config", return_value=mock_config), \
+         patch("chakra.orchestrator.setup_logging"), \
+         patch("chakra.orchestrator.GitHubTool", return_value=github), \
+         patch("chakra.orchestrator.SheetsTool", return_value=sheets), \
+         patch("chakra.orchestrator.SDLCAgent", return_value=agent), \
+         patch("chakra.orchestrator.AnthropicBackend"), \
+         patch("chakra.orchestrator._poll_task_approval", return_value="Approved"), \
          patch.dict("os.environ", {"GITHUB_TOKEN": "tok", "ANTHROPIC_API_KEY": "key"}):
         orchestrator.run(str(story_file))
 
@@ -122,13 +122,13 @@ def test_rejection_collects_feedback_and_replans(tmp_path, mock_config, mock_too
 
     story_file = tmp_path / "story.txt"
     story_file.write_text("story")
-    with patch("orchestrator.load_config", return_value=mock_config), \
-         patch("orchestrator.setup_logging"), \
-         patch("orchestrator.GitHubTool", return_value=github), \
-         patch("orchestrator.SheetsTool", return_value=sheets), \
-         patch("orchestrator.SDLCAgent", return_value=agent), \
-         patch("orchestrator.AnthropicBackend"), \
-         patch("orchestrator._poll_task_approval", side_effect=poll_side_effect), \
+    with patch("chakra.orchestrator.load_config", return_value=mock_config), \
+         patch("chakra.orchestrator.setup_logging"), \
+         patch("chakra.orchestrator.GitHubTool", return_value=github), \
+         patch("chakra.orchestrator.SheetsTool", return_value=sheets), \
+         patch("chakra.orchestrator.SDLCAgent", return_value=agent), \
+         patch("chakra.orchestrator.AnthropicBackend"), \
+         patch("chakra.orchestrator._poll_task_approval", side_effect=poll_side_effect), \
          patch("builtins.input", return_value="make it simpler"), \
          patch.dict("os.environ", {"GITHUB_TOKEN": "tok", "ANTHROPIC_API_KEY": "key"}):
         orchestrator.run(str(story_file))
@@ -141,13 +141,13 @@ def test_rejection_with_no_feedback_exits(tmp_path, mock_config, mock_tools):
     github, sheets, agent = mock_tools
     story_file = tmp_path / "story.txt"
     story_file.write_text("story")
-    with patch("orchestrator.load_config", return_value=mock_config), \
-         patch("orchestrator.setup_logging"), \
-         patch("orchestrator.GitHubTool", return_value=github), \
-         patch("orchestrator.SheetsTool", return_value=sheets), \
-         patch("orchestrator.SDLCAgent", return_value=agent), \
-         patch("orchestrator.AnthropicBackend"), \
-         patch("orchestrator._poll_task_approval", return_value="Rejected"), \
+    with patch("chakra.orchestrator.load_config", return_value=mock_config), \
+         patch("chakra.orchestrator.setup_logging"), \
+         patch("chakra.orchestrator.GitHubTool", return_value=github), \
+         patch("chakra.orchestrator.SheetsTool", return_value=sheets), \
+         patch("chakra.orchestrator.SDLCAgent", return_value=agent), \
+         patch("chakra.orchestrator.AnthropicBackend"), \
+         patch("chakra.orchestrator._poll_task_approval", return_value="Rejected"), \
          patch("builtins.input", return_value=""), \
          patch.dict("os.environ", {"GITHUB_TOKEN": "tok", "ANTHROPIC_API_KEY": "key"}):
         with pytest.raises(SystemExit):
@@ -155,7 +155,7 @@ def test_rejection_with_no_feedback_exits(tmp_path, mock_config, mock_tools):
 
 
 def test_orchestrator_uses_claude_cli_backend_when_configured(tmp_path, mock_tools):
-    from tools.config import (
+    from chakra.tools.config import (
         Config, GitHubConfig, AnthropicConfig, GoogleConfig,
         TrackerConfig, StoryConfig, ClaudeCliConfig,
     )
@@ -171,13 +171,13 @@ def test_orchestrator_uses_claude_cli_backend_when_configured(tmp_path, mock_too
     github, sheets, agent = mock_tools
     story_file = tmp_path / "story.txt"
     story_file.write_text("story")
-    with patch("orchestrator.load_config", return_value=config), \
-         patch("orchestrator.setup_logging"), \
-         patch("orchestrator.GitHubTool", return_value=github), \
-         patch("orchestrator.SheetsTool", return_value=sheets), \
-         patch("orchestrator.SDLCAgent", return_value=agent), \
-         patch("orchestrator.ClaudeCliBackend") as mock_cli, \
-         patch("orchestrator._poll_task_approval", return_value="Approved"), \
+    with patch("chakra.orchestrator.load_config", return_value=config), \
+         patch("chakra.orchestrator.setup_logging"), \
+         patch("chakra.orchestrator.GitHubTool", return_value=github), \
+         patch("chakra.orchestrator.SheetsTool", return_value=sheets), \
+         patch("chakra.orchestrator.SDLCAgent", return_value=agent), \
+         patch("chakra.orchestrator.ClaudeCliBackend") as mock_cli, \
+         patch("chakra.orchestrator._poll_task_approval", return_value="Approved"), \
          patch.dict("os.environ", {"GITHUB_TOKEN": "tok"}):
         orchestrator.run(str(story_file))
     mock_cli.assert_called_once_with(model=None, timeout=120)
@@ -187,10 +187,10 @@ def test_orchestrator_raises_when_api_key_missing(tmp_path, mock_config, mock_to
     github, sheets, agent = mock_tools
     story_file = tmp_path / "story.txt"
     story_file.write_text("story")
-    with patch("orchestrator.load_config", return_value=mock_config), \
-         patch("orchestrator.setup_logging"), \
-         patch("orchestrator.GitHubTool", return_value=github), \
-         patch("orchestrator.SheetsTool", return_value=sheets), \
+    with patch("chakra.orchestrator.load_config", return_value=mock_config), \
+         patch("chakra.orchestrator.setup_logging"), \
+         patch("chakra.orchestrator.GitHubTool", return_value=github), \
+         patch("chakra.orchestrator.SheetsTool", return_value=sheets), \
          patch.dict("os.environ", {"GITHUB_TOKEN": "tok"}, clear=True), \
          pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
         orchestrator.run(str(story_file))
@@ -206,8 +206,8 @@ def test_next_story_id_increments_from_existing(tmp_path, mock_config, mock_tool
 
 def test_missing_story_file_exits(tmp_path, mock_config, mock_tools):
     github, sheets, agent = mock_tools
-    with patch("orchestrator.load_config", return_value=mock_config), \
-         patch("orchestrator.setup_logging"), \
+    with patch("chakra.orchestrator.load_config", return_value=mock_config), \
+         patch("chakra.orchestrator.setup_logging"), \
          patch.dict("os.environ", {"GITHUB_TOKEN": "tok", "ANTHROPIC_API_KEY": "key"}):
         with pytest.raises((FileNotFoundError, SystemExit)):
             orchestrator.run(str(tmp_path / "nonexistent.txt"))
@@ -243,13 +243,13 @@ def test_coverage_below_95_after_max_retries_exits(tmp_path, mock_config, mock_t
     agent.measure_coverage.return_value = (40.0, "TOTAL 10 6 40%")
     story_file = tmp_path / "story.txt"
     story_file.write_text("story")
-    with patch("orchestrator.load_config", return_value=mock_config), \
-         patch("orchestrator.setup_logging"), \
-         patch("orchestrator.GitHubTool", return_value=github), \
-         patch("orchestrator.SheetsTool", return_value=sheets), \
-         patch("orchestrator.SDLCAgent", return_value=agent), \
-         patch("orchestrator.AnthropicBackend"), \
-         patch("orchestrator._poll_task_approval", return_value="Approved"), \
+    with patch("chakra.orchestrator.load_config", return_value=mock_config), \
+         patch("chakra.orchestrator.setup_logging"), \
+         patch("chakra.orchestrator.GitHubTool", return_value=github), \
+         patch("chakra.orchestrator.SheetsTool", return_value=sheets), \
+         patch("chakra.orchestrator.SDLCAgent", return_value=agent), \
+         patch("chakra.orchestrator.AnthropicBackend"), \
+         patch("chakra.orchestrator._poll_task_approval", return_value="Approved"), \
          patch.dict("os.environ", {"GITHUB_TOKEN": "tok", "ANTHROPIC_API_KEY": "key"}):
         with pytest.raises(SystemExit) as exc_info:
             orchestrator.run(str(story_file))
