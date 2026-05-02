@@ -2,8 +2,10 @@
 
 Agentic SDLC loop: drop in a user story, get a GitHub PR — autonomously planned, coded, and tested by Claude.
 
-```
-python3 orchestrator.py story.txt
+```bash
+pipx install chakra-sdlc
+chakra init
+chakra run "Add user login with JWT tokens"
 ```
 
 ![Chakra Agentic SDLC Loop](docs/chakra_cicd.png)
@@ -12,7 +14,7 @@ python3 orchestrator.py story.txt
 
 ## How It Works
 
-1. Reads `story.txt` (plain text user story, first line used as title)
+1. Reads your story (inline text or a `.txt` file)
 2. Claude breaks the story into tasks and writes them to a **Google Sheets Tasks tab**
 3. A **Draft PR** is opened immediately so you can track progress
 4. For each task, the orchestrator **polls Google Sheets** — set a task row to `Approved` to trigger coding, or `Rejected` to trigger re-planning
@@ -26,66 +28,60 @@ python3 orchestrator.py story.txt
 ## Prerequisites
 
 - Python 3.12+
-- A GitHub Personal Access Token (scopes: `repo`, `workflow`)
 - **One of:**
   - A Claude subscription with `claude` CLI on your PATH *(default — no API key needed)*
-  - An Anthropic API key (set `backend: anthropic-api` in `chakra.yaml`)
+  - An Anthropic API key (set `backend: anthropic-api` during `chakra init`)
+- A GitHub Personal Access Token (scopes: `repo`, `workflow`)
 - A Google Cloud service account with Sheets API access
+
+---
+
+## Install
+
+```bash
+pipx install chakra-sdlc
+```
+
+Or for development from source:
+
+```bash
+git clone https://github.com/sagarm85/chakra.git
+cd chakra
+pip install -e ".[dev]"
+```
 
 ---
 
 ## Setup
 
-### 1. Install dependencies
+### 1. Run the setup wizard
 
 ```bash
-pip install -r requirements.txt
+chakra init
 ```
 
-### 2. Configure `chakra.yaml`
+This walks you through all required config and writes `~/.chakra/config.yaml`:
 
-Open `chakra.yaml` and fill in:
+```
+Welcome to Chakra! Let's set up your configuration.
 
-```yaml
-github:
-  repo: "your-org/your-repo"       # target repo for PRs
-  base_branch: "main"
-  ci_workflow: "ci.yml"            # workflow file to trigger on merge
+Backend [claude-cli/anthropic-api] (default: claude-cli):
+GitHub repo (e.g. your-org/your-repo): sagarm85/kv-store
+GitHub token: ****
+Google credentials path [~/.chakra/credentials.json]:
+Google spreadsheet ID: 1QRc_...
+Sheet name [Chakra Tracker]:
+Story ID prefix [CHAKRA]:
 
-# Backend: "claude-cli" (default) or "anthropic-api"
-backend: "claude-cli"
-
-claude_cli:
-  model: null       # null = use the CLI's default model
-  timeout: 300      # seconds before subprocess times out
-
-anthropic:
-  model: "claude-opus-4-7"   # used only when backend: anthropic-api
-
-google:
-  credentials_path: "./credentials.json"
-  spreadsheet_id: "your-sheet-id"  # see below for how to find this
-
-tracker:
-  sheet_name: "Chakra Tracker"
-
-story:
-  id_prefix: "CHAKRA"
+✓ Config written to ~/.chakra/config.yaml
+Run `chakra run "your story"` to get started.
 ```
 
-### 3. GitHub Token
+Re-running `chakra init` shows existing values as defaults — update only what you need.
 
-Create a Personal Access Token at **GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens**.
+### 2. Backend credentials
 
-Required scopes: `repo`, `workflow`
-
-```bash
-export GITHUB_TOKEN=your_token_here
-```
-
-### 4. Backend credentials
-
-#### Option A — Claude CLI (default)
+#### Option A — Claude CLI (default, recommended)
 
 Ensure the `claude` CLI is installed and logged in:
 
@@ -97,13 +93,13 @@ No API key needed — Chakra calls `claude -p` as a subprocess.
 
 #### Option B — Anthropic API
 
-Set `backend: anthropic-api` in `chakra.yaml`, then:
+Set `backend: anthropic-api` during `chakra init`, then either enter your API key in the wizard or:
 
 ```bash
 export ANTHROPIC_API_KEY=your_key_here
 ```
 
-### 5. Google Sheets — Service Account Setup
+### 3. Google Sheets — Service Account Setup
 
 #### a. Create a Google Cloud project
 - Go to [console.cloud.google.com](https://console.cloud.google.com)
@@ -120,8 +116,7 @@ export ANTHROPIC_API_KEY=your_key_here
 
 #### d. Download the JSON key
 - Click the service account → **Keys** tab → **Add Key → Create new key → JSON**
-- Rename the downloaded file to `credentials.json`
-- Place it in the project root (it is already git-ignored)
+- Save it to `~/.chakra/credentials.json` (the default path `chakra init` suggests)
 
 #### e. Find your Spreadsheet ID
 Open your Google Sheet in a browser. The ID is the long string in the URL:
@@ -130,7 +125,7 @@ Open your Google Sheet in a browser. The ID is the long string in the URL:
 https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID_HERE/edit
 ```
 
-Paste it into `chakra.yaml` under `google.spreadsheet_id`.
+Enter it when prompted by `chakra init`.
 
 #### f. Share the sheet with the service account
 - Open your Google Sheet → **Share**
@@ -142,14 +137,16 @@ Paste it into `chakra.yaml` under `google.spreadsheet_id`.
 ## Running
 
 ```bash
-export GITHUB_TOKEN=...
-python3 orchestrator.py story.txt           # claude-cli backend (default)
+chakra run "Add user login with email and password"   # inline story
+chakra run story.txt                                   # story from file
+```
 
-# — or —
+**Per-run override flags** (override `~/.chakra/config.yaml` for a single run):
 
-export GITHUB_TOKEN=...
-export ANTHROPIC_API_KEY=...
-python3 orchestrator.py story.txt           # set backend: anthropic-api in chakra.yaml
+```bash
+chakra run --repo other-org/other-repo "Add feature X"
+chakra run --backend anthropic-api --model claude-opus-4-7 story.txt
+chakra run --sheet-id 1abc... story.txt
 ```
 
 **Example `story.txt`:**
@@ -227,7 +224,7 @@ If you edit `story.txt` between runs, Chakra detects the content change (via SHA
 **To force a fresh run:**
 ```bash
 rm story.chakra.json
-python3 orchestrator.py story.txt
+chakra run story.txt
 ```
 
 ---
@@ -236,11 +233,11 @@ python3 orchestrator.py story.txt
 
 | File | Status |
 |------|--------|
-| `credentials.json` | git-ignored — never committed |
-| `.env` | git-ignored |
+| `~/.chakra/config.yaml` | local only — never committed |
+| `~/.chakra/credentials.json` | local only — never committed |
 | `logs/` | git-ignored |
-| `GITHUB_TOKEN` | env var only |
-| `ANTHROPIC_API_KEY` | env var only |
+| `GITHUB_TOKEN` | env var or stored in `~/.chakra/config.yaml` (local only) |
+| `ANTHROPIC_API_KEY` | env var or stored in `~/.chakra/config.yaml` (local only) |
 
 ---
 
@@ -248,20 +245,22 @@ python3 orchestrator.py story.txt
 
 ```
 chakra/
-├── orchestrator.py          # entry point; per-task sheet-driven approval loop
-├── chakra.yaml              # configuration
+├── pyproject.toml           # package metadata and entry point
 ├── CLAUDE.md                # Claude Code context
-├── requirements.txt
-├── agents/
-│   ├── sdlc_agent.py        # plan / code_task / test / measure_coverage
-│   ├── backend.py           # AgentBackend Protocol (runtime_checkable)
-│   ├── anthropic_backend.py # AnthropicBackend: Anthropic SDK (requires API key)
-│   └── claude_cli_backend.py# ClaudeCliBackend: `claude -p` subprocess
-└── tools/
-    ├── config.py            # config loader
-    ├── logger.py            # logging setup
-    ├── approval_tool.py     # terminal re-plan feedback prompt
-    ├── checkpoint_tool.py   # phase checkpoint save/load/clear
-    ├── github_tool.py       # branch / commit / draft PR / mark ready / CI
-    └── sheets_tool.py       # story tracker + per-task approval sheet
+└── src/chakra/
+    ├── cli.py               # Click entry point: chakra init + chakra run
+    ├── config_wizard.py     # chakra init interactive wizard
+    ├── orchestrator.py      # per-task sheet-driven approval loop
+    ├── agents/
+    │   ├── sdlc_agent.py        # plan / code_task / test / measure_coverage
+    │   ├── backend.py           # AgentBackend Protocol (runtime_checkable)
+    │   ├── anthropic_backend.py # AnthropicBackend: Anthropic SDK
+    │   └── claude_cli_backend.py# ClaudeCliBackend: `claude -p` subprocess
+    └── tools/
+        ├── config.py            # config loader (reads ~/.chakra/config.yaml)
+        ├── logger.py            # logging setup
+        ├── approval_tool.py     # terminal re-plan feedback prompt
+        ├── checkpoint_tool.py   # phase checkpoint save/load/clear
+        ├── github_tool.py       # branch / commit / draft PR / mark ready / CI
+        └── sheets_tool.py       # story tracker + per-task approval sheet
 ```
