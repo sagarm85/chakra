@@ -132,3 +132,59 @@ def test_load_config_invalid_backend_raises(tmp_path):
     cfg_file.write_text(bad_yaml)
     with pytest.raises(ValueError, match="Invalid backend"):
         load_config(str(cfg_file))
+
+
+import chakra.tools.config as cfg_module
+from chakra.tools.config import load_config, Config
+
+
+def _write_cfg(path, repo="a/b", token=None):
+    """Helper: write a minimal valid config YAML."""
+    import yaml
+    data = {
+        "github": {"repo": repo, "base_branch": "main", "ci_workflow": "ci.yml"},
+        "anthropic": {"model": "claude-opus-4-7"},
+        "google": {"credentials_path": "./creds.json", "spreadsheet_id": "sid"},
+        "tracker": {"sheet_name": "Chakra Tracker"},
+        "story": {"id_prefix": "CHAKRA"},
+        "backend": "anthropic-api",
+    }
+    if token:
+        data["github"]["token"] = token
+    path.write_text(yaml.dump(data))
+
+
+def test_load_config_reads_global_config(tmp_path, monkeypatch):
+    """load_config() with no args reads the patched _GLOBAL_CONFIG path."""
+    global_cfg = tmp_path / "config.yaml"
+    _write_cfg(global_cfg, repo="a/b")
+    monkeypatch.setattr(cfg_module, "_GLOBAL_CONFIG", global_cfg)
+    result = load_config()
+    assert result.github.repo == "a/b"
+
+
+def test_load_config_falls_back_to_local(tmp_path, monkeypatch):
+    """load_config() falls back to _LOCAL_CONFIG when global does not exist."""
+    local_cfg = tmp_path / "chakra.yaml"
+    _write_cfg(local_cfg, repo="c/d")
+    monkeypatch.setattr(cfg_module, "_GLOBAL_CONFIG", tmp_path / "no-such.yaml")
+    monkeypatch.setattr(cfg_module, "_LOCAL_CONFIG", local_cfg)
+    result = load_config()
+    assert result.github.repo == "c/d"
+
+
+def test_load_config_no_config_raises(tmp_path, monkeypatch):
+    """load_config() raises FileNotFoundError with 'chakra init' hint."""
+    monkeypatch.setattr(cfg_module, "_GLOBAL_CONFIG", tmp_path / "no-global.yaml")
+    monkeypatch.setattr(cfg_module, "_LOCAL_CONFIG", tmp_path / "no-local.yaml")
+    with pytest.raises(FileNotFoundError, match="chakra init"):
+        load_config()
+
+
+def test_github_config_stores_token(tmp_path, monkeypatch):
+    """GitHubConfig.token is populated from the config file."""
+    global_cfg = tmp_path / "config.yaml"
+    _write_cfg(global_cfg, token="ghp_abc")
+    monkeypatch.setattr(cfg_module, "_GLOBAL_CONFIG", global_cfg)
+    result = load_config()
+    assert result.github.token == "ghp_abc"
