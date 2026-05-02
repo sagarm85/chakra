@@ -1,11 +1,7 @@
 import getpass
-import sys
 from pathlib import Path
 import yaml
 
-# Module-level constants: computed lazily so tests that patch HOME before
-# importing this module see the correct path. When already imported, callers
-# that need the live path should use run_wizard()'s return value instead.
 CHAKRA_DIR = Path.home() / ".chakra"
 CONFIG_PATH = CHAKRA_DIR / "config.yaml"
 
@@ -19,28 +15,9 @@ _DEFAULTS = {
 }
 
 
-def _get_paths() -> tuple[Path, Path]:
-    """Return (chakra_dir, config_path) resolved against the current HOME.
-
-    Recomputed on every call so that tests which monkeypatch HOME before
-    calling run_wizard() always get the correct paths, even if this module
-    was already imported (and the module-level constants are stale).
-    """
-    chakra_dir = Path.home() / ".chakra"
-    config_path = chakra_dir / "config.yaml"
-
-    # Keep module-level constants in sync so that code doing
-    # ``from chakra.config_wizard import CONFIG_PATH`` gets an up-to-date
-    # value when the module is freshly imported in each test.
-    this = sys.modules[__name__]
-    this.CHAKRA_DIR = chakra_dir
-    this.CONFIG_PATH = config_path
-    return chakra_dir, config_path
-
-
-def _load_existing(config_path: Path) -> dict:
-    if config_path.exists():
-        return yaml.safe_load(config_path.read_text()) or {}
+def _load_existing() -> dict:
+    if CONFIG_PATH.exists():
+        return yaml.safe_load(CONFIG_PATH.read_text()) or {}
     return {}
 
 
@@ -52,8 +29,7 @@ def _prompt(label: str, default: str, secret: bool = False) -> str:
 
 def run_wizard() -> Path:
     """Run interactive setup wizard. Returns path to written config file."""
-    chakra_dir, config_path = _get_paths()
-    existing = _load_existing(config_path)
+    existing = _load_existing()
 
     backend = _prompt(
         "Backend [claude-cli/anthropic-api]",
@@ -71,7 +47,7 @@ def run_wizard() -> Path:
     creds_path = _prompt(
         "Google credentials path",
         existing.get("google", {}).get(
-            "credentials_path", str(chakra_dir / "credentials.json")
+            "credentials_path", str(CHAKRA_DIR / "credentials.json")
         ),
     )
     sheet_id = _prompt(
@@ -105,6 +81,6 @@ def run_wizard() -> Path:
         "story": {"id_prefix": id_prefix},
     }
 
-    chakra_dir.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(yaml.dump(config, default_flow_style=False))
-    return config_path
+    CHAKRA_DIR.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH.write_text(yaml.dump(config, default_flow_style=False))
+    return CONFIG_PATH

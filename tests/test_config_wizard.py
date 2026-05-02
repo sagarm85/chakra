@@ -2,27 +2,32 @@ import yaml
 import pytest
 from pathlib import Path
 from unittest.mock import patch
+import chakra.config_wizard as wiz_module
+from chakra.config_wizard import run_wizard
 
 
 def test_run_wizard_writes_config(tmp_path, monkeypatch):
-    """run_wizard() writes ~/.chakra/config.yaml with user inputs."""
-    monkeypatch.setenv("HOME", str(tmp_path))
+    """run_wizard() writes config.yaml with user inputs."""
+    chakra_dir = tmp_path / ".chakra"
+    config_path = chakra_dir / "config.yaml"
+    monkeypatch.setattr(wiz_module, "CHAKRA_DIR", chakra_dir)
+    monkeypatch.setattr(wiz_module, "CONFIG_PATH", config_path)
+
     inputs = iter([
-        "claude-cli",        # backend
-        "my-org/my-repo",    # repo
-        "ghp_token123",      # token
-        str(tmp_path / "creds.json"),  # credentials path
-        "sheet-id-abc",      # spreadsheet ID
-        "Chakra Tracker",    # sheet name
-        "CHAKRA",            # id prefix
+        "claude-cli",
+        "my-org/my-repo",
+        "ghp_token123",
+        str(tmp_path / "creds.json"),
+        "sheet-id-abc",
+        "Chakra Tracker",
+        "CHAKRA",
     ])
     with patch("builtins.input", side_effect=inputs), \
          patch("getpass.getpass", side_effect=inputs):
-        from chakra.config_wizard import run_wizard, CONFIG_PATH
         result = run_wizard()
 
-    assert result == CONFIG_PATH
-    data = yaml.safe_load(CONFIG_PATH.read_text())
+    assert result == config_path
+    data = yaml.safe_load(config_path.read_text())
     assert data["github"]["repo"] == "my-org/my-repo"
     assert data["github"]["token"] == "ghp_token123"
     assert data["backend"] == "claude-cli"
@@ -30,22 +35,28 @@ def test_run_wizard_writes_config(tmp_path, monkeypatch):
 
 
 def test_run_wizard_creates_chakra_dir(tmp_path, monkeypatch):
-    """run_wizard() creates ~/.chakra/ if it doesn't exist."""
-    monkeypatch.setenv("HOME", str(tmp_path))
-    assert not (tmp_path / ".chakra").exists()
+    """run_wizard() creates the chakra dir if it doesn't exist."""
+    chakra_dir = tmp_path / ".chakra"
+    config_path = chakra_dir / "config.yaml"
+    monkeypatch.setattr(wiz_module, "CHAKRA_DIR", chakra_dir)
+    monkeypatch.setattr(wiz_module, "CONFIG_PATH", config_path)
+
+    assert not chakra_dir.exists()
     inputs = iter(["claude-cli", "a/b", "tok", str(tmp_path / "c.json"), "sid", "Sheet", "PFX"])
     with patch("builtins.input", side_effect=inputs), \
          patch("getpass.getpass", side_effect=inputs):
-        from chakra.config_wizard import run_wizard
         run_wizard()
-    assert (tmp_path / ".chakra").exists()
+    assert chakra_dir.exists()
 
 
 def test_run_wizard_uses_existing_values_as_defaults(tmp_path, monkeypatch):
-    """Re-running run_wizard() shows existing config values as defaults."""
-    monkeypatch.setenv("HOME", str(tmp_path))
+    """Re-running run_wizard() uses existing config values as defaults."""
     chakra_dir = tmp_path / ".chakra"
+    config_path = chakra_dir / "config.yaml"
     chakra_dir.mkdir()
+    monkeypatch.setattr(wiz_module, "CHAKRA_DIR", chakra_dir)
+    monkeypatch.setattr(wiz_module, "CONFIG_PATH", config_path)
+
     existing = {
         "backend": "anthropic-api",
         "github": {"repo": "old/repo", "base_branch": "main",
@@ -56,15 +67,13 @@ def test_run_wizard_uses_existing_values_as_defaults(tmp_path, monkeypatch):
         "claude_cli": {"model": None, "timeout": 300},
         "anthropic": {"model": "claude-opus-4-7"},
     }
-    (chakra_dir / "config.yaml").write_text(yaml.dump(existing))
+    config_path.write_text(yaml.dump(existing))
 
-    # User presses Enter for all prompts (keeps defaults)
     with patch("builtins.input", return_value=""), \
          patch("getpass.getpass", return_value=""):
-        from chakra.config_wizard import run_wizard, CONFIG_PATH
         run_wizard()
 
-    data = yaml.safe_load(CONFIG_PATH.read_text())
-    assert data["github"]["repo"] == "old/repo"   # kept existing value
+    data = yaml.safe_load(config_path.read_text())
+    assert data["github"]["repo"] == "old/repo"
     assert data["backend"] == "anthropic-api"
     assert data["story"]["id_prefix"] == "OLD"
