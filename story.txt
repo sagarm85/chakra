@@ -1,34 +1,12 @@
-Build a version-controlled key-value store with an HTTP API we can query that from. The API
-needs to be able to:
-1. Accept a key(string) and value(some JSON blob/string) and store them.
-a. If the key does not exist, create it at Version 1.
-b. If the key exists, you must increment the version number by exactly 1.
-c. If you flood the API e.g 50 concurrent requests within 30 seconds to update the
-key, the database should end up with versions 1 through 51 clearly defined.
+Build a simple URL shortener REST API in Python.
 
-2. Accept a key and return the corresponding latest value
-3. When given a key AND a timestamp, return whatever the value of the key at the time
-was.
-4. Displays all values currently stored in the database.
-Assume only GET and POST requests for simplicity.
+The API needs to:
+1. POST /shorten — accept a long URL and return a short code (6-char alphanumeric)
+2. GET /{code} — redirect to the original URL (302), or return 404 if code not found
+3. GET /stats/{code} — return the original URL and how many times it has been accessed
 
-All timestamps are UNIX timestamps according to the UTC timezone.
-
-Guidelines:
-1. Use Java as the language for development (frameworks such as Spring/Play are
-acceptable).
-2. Data should be stored in a database service of your choice.
-3. Unit testing and CI/CD service should monitor the master branch for updates. E.g any
-change to a file on the master branch should trigger a build that will initiate testing and
-deploy to the hosting server if there are no errors.
-4. Deploy this to a server and give us the URL.
-5. Push the code to a public git repository and give us the URL.
-6. You are free to use any open-source database/ hosting/ CICD/ testing service.
-
-A good submission will have the following characteristics:
-1. Clean and extendable code
-2. Handle a wide variety of edge cases
-3. Not break under a reasonable load
-4. A good unit testing coverage report
-5. Build status for each commit to show test passing status
-*Bonus - Add code coverage reporting into CI/CD pipeline
+Requirements:
+- Store data in memory (a Python dict is fine, no database needed)
+- Use Flask or FastAPI
+- Return JSON for all non-redirect responses
+- Include basic input validation (reject empty or non-URL strings)

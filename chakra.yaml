@@ -1,5 +1,5 @@
 github:
-  repo: "sagarm85/chakra"
+  repo: "sagarm85/kv-store"
   base_branch: "main"
   ci_workflow: "ci.yml"
 
@@ -10,7 +10,7 @@ backend: "claude-cli"
 
 claude_cli:
   model: null
-  timeout: 120
+  timeout: 300
 
 google:
   credentials_path: "./credentials.json"
