@@ -1,4 +1,4 @@
-from agents.backend import AgentBackend
+from chakra.agents.backend import AgentBackend
 
 
 def test_agent_backend_importable():

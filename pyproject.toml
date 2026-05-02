@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "chakra-sdlc"
+version = "0.1.0"
+description = "Agentic SDLC loop: user story → GitHub PR via Claude"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "click>=8.1",
+    "anthropic>=0.40.0",
+    "PyGithub>=2.3.0",
+    "gspread>=6.0.0",
+    "google-auth>=2.28.0",
+    "PyYAML>=6.0.1",
+    "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=5.0.0",
+    "pytest-mock>=3.14.0",
+]
+
+[project.scripts]
+chakra = "chakra.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/chakra"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

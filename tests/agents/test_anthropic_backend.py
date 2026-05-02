@@ -1,11 +1,11 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from agents.anthropic_backend import AnthropicBackend
+from chakra.agents.anthropic_backend import AnthropicBackend
 
 
 @pytest.fixture
 def backend():
-    with patch("agents.anthropic_backend.anthropic.Anthropic"):
+    with patch("chakra.agents.anthropic_backend.anthropic.Anthropic"):
         b = AnthropicBackend(api_key="fake-key", model="claude-opus-4-7")
         b._client = MagicMock()
         yield b
@@ -46,7 +46,7 @@ def test_call_sets_max_tokens(backend):
 
 
 def test_implements_agent_backend_protocol():
-    from agents.backend import AgentBackend
-    with patch("agents.anthropic_backend.anthropic.Anthropic"):
+    from chakra.agents.backend import AgentBackend
+    with patch("chakra.agents.anthropic_backend.anthropic.Anthropic"):
         b = AnthropicBackend(api_key="k", model="m")
     assert isinstance(b, AgentBackend)

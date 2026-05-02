@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from tools.github_tool import GitHubTool
+from chakra.tools.github_tool import GitHubTool
 
 
 @pytest.fixture
@@ -10,7 +10,7 @@ def mock_repo():
 
 @pytest.fixture
 def github_tool(mock_repo):
-    with patch("tools.github_tool.Github") as mock_gh_class:
+    with patch("chakra.tools.github_tool.Github") as mock_gh_class:
         mock_gh = MagicMock()
         mock_gh_class.return_value = mock_gh
         mock_gh.get_repo.return_value = mock_repo
@@ -79,7 +79,7 @@ def test_poll_merge_retries_until_merged(github_tool, mock_repo):
     merged_pr = MagicMock()
     merged_pr.merged = True
     mock_repo.get_pull.side_effect = [open_pr, merged_pr]
-    with patch("tools.github_tool.time.sleep"):
+    with patch("chakra.tools.github_tool.time.sleep"):
         github_tool.poll_merge(42, interval_seconds=1)
     assert mock_repo.get_pull.call_count == 2
 
@@ -118,7 +118,7 @@ def test_mark_pr_ready_calls_graphql(github_tool, mock_repo):
     mock_pr = MagicMock()
     mock_pr.node_id = "PR_kwAB"
     mock_repo.get_pull.return_value = mock_pr
-    with patch("tools.github_tool.requests.post") as mock_post:
+    with patch("chakra.tools.github_tool.requests.post") as mock_post:
         mock_resp = MagicMock()
         mock_resp.json.return_value = {
             "data": {"markPullRequestReadyForReview": {"pullRequest": {"isDraft": False}}}
@@ -135,7 +135,7 @@ def test_mark_pr_ready_raises_on_graphql_error(github_tool, mock_repo):
     mock_pr = MagicMock()
     mock_pr.node_id = "PR_kwAB"
     mock_repo.get_pull.return_value = mock_pr
-    with patch("tools.github_tool.requests.post") as mock_post:
+    with patch("chakra.tools.github_tool.requests.post") as mock_post:
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"errors": [{"message": "not allowed"}]}
         mock_post.return_value = mock_resp
@@ -144,6 +144,6 @@ def test_mark_pr_ready_raises_on_graphql_error(github_tool, mock_repo):
 
 
 def test_github_tool_stores_token():
-    with patch("tools.github_tool.Github"):
+    with patch("chakra.tools.github_tool.Github"):
         tool = GitHubTool("my-secret-token", "owner/repo")
     assert tool._token == "my-secret-token"
